@@ -253,7 +253,7 @@ legend('topright', lty = c(1, 2), pch = c(1, NA),
        lwd = rep(2, 2))
 
 ```
-
+ $$\frac{\sqrt{MSE_{TEST}}}{\bar{y}_{TEST}} = 0,08 $$
 
 
 
