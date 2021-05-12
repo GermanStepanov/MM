@@ -1,0 +1,312 @@
+---
+title: "Упражнение 8"
+author: "Степанов Герман"
+date: "10 05 2021"
+output: html_document
+---
+
+Необходимо построить две модели для прогноза на основе дерева решений:
+ - *для непрерывной зависимой переменной;* 
+ - *для категориальной зависимой переменной.*
+ 
+Данные и переменные указаны в таблице с вариантами.
+
+Ядро генератора случайных чисел – номер варианта.
+
+Задания Для каждой модели:
+
+1. Указать настроечные параметры метода из своего варианта (например: количество узлов, количество предикторов, скорость обучения).
+
+2. Подогнать модель на обучающей выборке (50% наблюдений). Рассчитать MSE на тестовой выборке.
+
+3. Перестроить модель с помощью метода, указанного в варианте.
+
+4. Сделать прогноз по модели с подобранными в п.3 параметрами на тестовой выборке, оценить его точность и построить график «прогноз-реализация».
+
+Как сдавать: прислать на почту преподавателя ссылки: * на html-отчёт с видимыми блоками кода (блоки кода с параметром echo = T), размещённый на rpubs.com.
+* на код, генерирующий отчёт, в репозитории на github.com. В текст отчёта включить постановку задачи и ответы на вопросы задания.
+
+## Вариант 10
+
+ - Метод подгонки моделей: бустинг
+
+ - Данные: *Wage{ISLR}*
+
+```{r setup, include=FALSE}
+library('tree')              # деревья tree()
+library('ISLR')              # набор данных Carseats
+library('GGally')            # матричный график разброса ggpairs()
+library('randomForest')      # случайный лес randomForest()
+library('class')
+
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+# Загрузка данных Auto
+data('Auto')
+
+# Название столбцов переменных
+names(Auto)
+# Размерность данных
+dim(Auto)
+# Ядро генератора случайных чисел
+my.seed <- 10
+```
+
+# Модель 1 (для непрерывной зависимой переменной mpg)
+
+```{r}
+# Избавляемся от Name
+Auto <- Auto[, -9]
+
+# ?Auto
+head(Auto)
+```
+
+```{r}
+# матричные графики разброса переменных
+p <- ggpairs(Auto[, c(1, 2:3)])
+suppressMessages(print(p))
+p <- ggpairs(Auto[, c(1, 4:5)])
+suppressMessages(print(p))
+p <- ggpairs(Auto[, c(1, 6:8)])
+suppressMessages(print(p))
+```
+
+```{r}
+# Обучающая выборка
+set.seed(my.seed)
+# Обучающая выборка - 50%
+train <- sample(1:nrow(Auto), nrow(Auto)/2)
+```
+
+Построим дерево регрессии для зависимой переменной *mpg*: миль на галлон.
+
+```{r}
+# Обучаем модель
+tree.auto <- tree(mpg ~ ., Auto, subset = train)
+summary(tree.auto)
+```
+
+```{r}
+# Визуализация
+plot(tree.auto)
+text(tree.auto, pretty = 0)
+```
+
+
+```{r}
+tree.auto                    # Посмотреть всё дерево в консоли
+```
+
+```{r}
+# Прогноз по модели 
+yhat <- predict(tree.auto, newdata = Auto[-train, ])
+auto.test <- Auto[-train, "mpg"]
+
+# MSE на тестовой выборке
+mse.test <- mean((yhat - auto.test)^2)
+names(mse.test)[length(mse.test)] <- 'Auto.regr.tree.all'
+mse.test
+# Точность прогноза на тестовой выборке
+acc.test <- sum(abs(yhat-auto.test))/sum(auto.test)
+names(acc.test)[length(acc.test)] <- 'Auto.regr.tree.all'
+acc.test
+```
+
+#Бэггинг (модель 1)
+
+Используем бэггинг, причем возбмем все 7 предикторов на каждом шаге.
+
+```{r}
+# бэггинг с 7 предикторами
+set.seed(my.seed)
+bag.auto <- randomForest(mpg ~ ., data = Auto, subset = train, 
+                           mtry = 7, importance = TRUE)
+
+bag.auto
+```
+
+```{r}
+# прогноз
+yhat.bag = predict(bag.auto, newdata = Auto[-train, ])
+
+# MSE на тестовой
+mse.test <- c(mse.test, mean((yhat.bag - auto.test)^2))
+names(mse.test)[length(mse.test)] <- 'Auto.bag.model.1.7'
+mse.test
+```
+
+```{r}
+# Точность прогноза на тестовой выборке
+acc.test <- sum(abs(yhat.bag-auto.test))/sum(auto.test)
+names(acc.test)[length(acc.test)] <- 'Auto.regr.tree.model.1.7'
+acc.test
+```
+
+Ошибка на тестовой выборке равна 7.974. Можно изменить число деревьев с помощью аргумента.
+
+```{r}
+# Бэггинг с 7 предикторами и 25 деревьями
+bag.auto <- randomForest(mpg ~ ., data = Auto, subset = train,
+                           mtry = 7, ntree = 25)
+
+# прогноз
+yhat.bag <- predict(bag.auto, newdata = Auto[-train, ])
+
+# MSE на тестовой
+mse.test <- c(mse.test, mean((yhat.bag - auto.test)^2))
+names(mse.test)[length(mse.test)] <- 'Auto.bag.model.1.7.25'
+mse.test
+```
+
+
+
+```{r}
+# Точность прогноза на тестовой выборке
+acc.test <- c(acc.test, sum(abs(yhat.bag-auto.test))/sum(auto.test))
+names(acc.test)[length(acc.test)] <- 'Auto.regr.tree.model.1.7.25'
+acc.test
+```
+
+```{r}
+# График прогноз - реализация
+plot(yhat.bag, auto.test)
+# линия идеального прогноза
+abline(0, 1)
+```
+
+Судя по полученным результатам наименьшая MSE наблюдается у модели с использованием бэггинга с 7 предикторами. Минимальная MSE на тестовой выборке равна 7.97, точность прогноза составила 0.08.
+
+# Модель 2 (для категориальной зависимой переменной high.medv) 
+Загрузим таблицу с данными по расходу бензина, лошадиной силе и другая информации для автомобилей и добавим к ней переменную high.mpg - миль на галлон:
+
+1, если миля на галлон >= 29;
+0 - в противном случае.
+
+```{r}
+# новая переменная
+high.mpg <- ifelse(Auto$mpg >= 29, 1, 0)
+high.mpg <- factor(high.mpg, labels = c('yes', 'no'))
+Auto$high.mpg <- high.mpg 
+
+# Название столбцов переменных
+names(Auto)
+dim(Auto)
+
+```
+
+
+```{r}
+# Матричные графики разброса переменных
+p <- ggpairs(Auto[, c(9, 1:2)], aes(color = high.mpg))
+suppressMessages(print(p))
+```
+
+```{r}
+p <- ggpairs(Auto[, c(9, 3:5)], aes(color = high.mpg))
+suppressMessages(print(p))
+```
+```{r}
+p <- ggpairs(Auto[, c(9, 6:8)], aes(color = high.mpg))
+suppressMessages(print(p))
+```
+
+Судя по графикам, класс 0 превосходит по размеру класс 1 по переменной high.mpg приблизительно в 3 раза. Классы на графиках разброса объясняющих переменных сильно смешаны, поэтому модели с непрерывной разрешающей границей вряд ли работают хорошо. Построим дерево для категориального отклика high.mpg, отбросив непрерывный отклик mpg (мы оставили его на первом графике, чтобы проверить, как сработало разделение по значению mpg = 29).
+
+```{r}
+# Модель бинарного  дерева
+tree.auto <- tree(high.mpg ~ .-mpg, Auto)
+summary(tree.auto)
+```
+```{r}
+# График результата
+plot(tree.auto)                # Ветви
+text(tree.auto, pretty = 0)    # Подписи
+```
+
+```{r}
+tree.auto                      # Посмотреть всё дерево в консоли
+```
+
+Теперь построим дерево на обучающей выборке и оценим ошибку на тестовой.
+
+```{r}
+# Тестовая выборка
+Auto.test <- Auto[-train,]
+high.mpg.test <- high.mpg[-train]
+
+# Строим дерево на обучающей выборке
+tree.auto <- tree(high.mpg ~ . -mpg, Auto, subset = train)
+
+# Делаем прогноз
+tree.pred <- predict(tree.auto, Auto.test, type = "class")
+
+# Матрица неточностей
+tbl <- table(tree.pred, high.mpg.test)
+tbl
+```
+
+```{r}
+# ACC на тестовой
+acc.test.2 <- sum(diag(tbl))/sum(tbl)
+names(acc.test.2)[length(acc.test.2)] <- 'Auto.class.tree.all.model.2'
+acc.test.2
+```
+
+Обобщённая характеристика точности: доля верных прогнозов: 0.93.
+
+# Бэггинг (модель 2)
+
+```{r}
+set.seed(my.seed)
+bag.auto <- randomForest(high.mpg ~ . -mpg, data = Auto, subset = train, 
+                           mtry = 7, importance = TRUE)
+# График и таблица относительной важности переменных
+summary(bag.auto)
+```
+
+```{r}
+# прогноз
+yhat.bag <-  predict(bag.auto, newdata = Auto[-train, ])
+
+# Матрица неточностей
+tbl <- table(yhat.bag, high.mpg.test)
+tbl
+```
+
+
+```{r}
+# Точность прогноза на тестовой выборке
+acc.test.2 <- c(acc.test.2, sum(diag(tbl))/sum(tbl))
+names(acc.test.2)[length(acc.test.2)] <- 'Auto.class.tree.model.2.7'
+acc.test.2
+```
+
+```{r}
+# бэггинг с 7 предикторами и 25 деревьями
+bag.auto <- randomForest(high.mpg ~ .-mpg, data = Auto, subset = train,
+                           mtry = 7, ntree = 25)
+
+# прогноз
+yhat.bag <- predict(bag.auto, newdata = Auto[-train, ])
+
+# Матрица неточностей
+tbl <- table(yhat.bag, high.mpg.test)
+tbl
+```
+
+```{r}
+# Точность прогноза на тестовой выборке
+acc.test.2 <- c(acc.test.2, sum(diag(tbl))/sum(tbl))
+names(acc.test.2)[length(acc.test.2)] <- 'Auto.class.tree.model.2.7.25'
+acc.test.2
+```
+```{r}
+# График "прогноз - реализация"
+plot(yhat.bag, Auto$high.mpg[-train])
+```
+Точность модели на тестовой выборке с применением бэггинга с 7 предикторами и 25 деревьями является самой высокой и равна 0.94.
+
